@@ -115,6 +115,7 @@ BMX280_U32_t bme280_compensate_H_int32(BMX280_S32_t adc_H) {
     return (BMX280_U32_t)(v_x1_u32r>>12);
 }
 
+// ===========================================================================================================================================
 pico_err_t bmx280_sw_reset(void) {
 
     uint8_t txdata = BMX280_REG_RESET_VALUE;
@@ -124,6 +125,7 @@ pico_err_t bmx280_sw_reset(void) {
     return err;
 }
 
+// ===========================================================================================================================================
 pico_err_t bmx280_init(bmx280_config_t * cfg, bool rst) { // need to update this with settings for run-time config...
 
     bmx280_mode_t mode = cfg->mode;
@@ -298,6 +300,11 @@ pico_err_t bmx280_status(bmx280_status_t * status) {
     if (err == 1) *status = (((buff >> BMX280_REG_STATUS_MEASBIT) & 0x01) | (((buff >> BMX280_REG_STATUS_IMGBIT) & 0x01) << 1));
     
     return err;
+}
+
+// ===========================================================================================================================================
+pico_err_t bmx280_self_test(bmx280_self_test_result_t * result) {
+    return 0;
 }
 
 /* NEED TO LOOK INTO THE FOLLOWING...

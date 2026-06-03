@@ -226,6 +226,21 @@ typedef struct {
     bmx280_osrs_t osrs_hum;
 } bmx280_config_t;
 
+// See section 10 in BME280 datasheet rev1.23 for implementation details
+// If necessary, adapt the measurement plausibility limits per your environment
+// Keep in mind also the recommended anneal/rest period following reflow solder attach
+// See section 7.9 "Reconditioning Procedure"
+typedef enum {
+    BMX280_OK                      = 0,
+    BMX280_COMM_ERR_OR_WRONG_DEV   = 10,
+    BMX280_TRIM_DATA_OOB           = 20,
+    BMX280_TEMP_BW_OR_MEMS_DEFECT  = 30,
+    BMX280_PRESS_BW_OR_MEMS_DEFECT = 31,
+    BMX280_IMPLAUSIBLE_TEMP        = 40, // Default limits are 0-40C
+    BMX280_IMPLAUSIBLE_PRESS       = 41, // Default limits are 900-1100hPa
+    BMX280_IMPLAUSIBLE_HUM         = 42  // Default limits are 20-80%rH
+} bmx280_self_test_result_t;
+
 // Compensation functions provided by Bosch in BMX280 datasheet
 BMX280_S32_t bmx280_compensate_T_int32(BMX280_S32_t adc_T);
 BMX280_U32_t bmx280_compensate_P_int64(BMX280_S32_t adc_P);
@@ -234,6 +249,7 @@ BMX280_U32_t bme280_compensate_H_int32(BMX280_S32_t adc_H); // Only relevant for
 pico_err_t bmx280_init(bmx280_config_t * cfg, bool rst);
 pico_err_t bmx280_sw_reset(void);
 pico_err_t bmx280_status(bmx280_status_t * status);
+pico_err_t bmx280_self_test(bmx280_self_test_result_t * result);
 pico_err_t bmx280_read_temp(int32_t * temp);
 pico_err_t bmx280_read_press(uint32_t * press);
 pico_err_t bme280_read_hum(uint32_t * hum);
