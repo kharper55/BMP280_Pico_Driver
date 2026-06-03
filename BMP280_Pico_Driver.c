@@ -18,19 +18,17 @@
 // Custom includes
 #include "bmx280.h"
 #include "app_i2c.h"
+#include "util.h"
+
+#define SCL_PIN 16
+#define SDA_PIN 17
 
 int main() {
+
     stdio_init_all();
 
-    i2c_init(i2c0, 400 * 1000); // 400kHz
-
-    gpio_set_function(/*PICO_DEFAULT_I2C_SDA_PIN*/17, GPIO_FUNC_I2C);
-    gpio_set_function(/*PICO_DEFAULT_I2C_SCL_PIN*/16, GPIO_FUNC_I2C);
-    //gpio_pull_up(PICO_DEFAULT_I2C_SDA_PIN);
-    //gpio_pull_up(PICO_DEFAULT_I2C_SCL_PIN); // Dev kits in use feature pullups already
-    bi_decl(bi_2pins_with_func(17, 16, GPIO_FUNC_I2C));
-
-    uint8_t rxdata[3];
+    app_i2c_init(i2c0, SCL_PIN, SDA_PIN, I2C_SPEED_FM, false);
+    //bi_decl(bi_2pins_with_func(SDA_PIN, SCL_PIN, GPIO_FUNC_I2C)); // No clue what this line does
 
     //int32_t temp_raw;
     //int32_t press_raw;
@@ -38,8 +36,17 @@ int main() {
     int32_t temp;
     uint32_t press;
     uint32_t hum;
+    bmx280_osrs_t temp_osrs = BMX280_OVERSAMP_X1;
+    bmx280_osrs_t press_osrs = BMX280_SKIP_MEAS;
+    bmx280_osrs_t hum_osrs = press_osrs;
 
-    bmx280_init(false);
+    const extern bmx280_config_t bmx280_indoor_nav_cfg;
+
+    //bmx280_config_t myCfg = {BMX280_PWR_MODE_NORM, BMX280_TSTDBY_0_5MS, BMX280_FILT_OFF, temp_osrs, press_osrs, hum_osrs};
+
+    bmx280_config_t myCfg = bmx280_indoor_nav_cfg;
+
+    bmx280_init(&myCfg, false);
 
     sleep_ms(100);
 
@@ -62,14 +69,17 @@ int main() {
         hum = bme280_compensate_H_int32(hum_raw);*/
 
         bmx280_read_temp(&temp);
-        bmx280_read_press(&press);
-        bme280_read_hum(&hum);
 
-        // Should investigate the bit resolution for various BME280 settings... Not always 20 bit depending on filter and oversampling settings
+        if (myCfg.osrs_press != BMX280_SKIP_MEAS && myCfg.osrs_hum != BMX280_SKIP_MEAS) {
+            bmx280_read_press(&press);
+            bme280_read_hum(&hum);
 
-        //printf("Raw Pressure: %d Raw Temperature: %d Raw Humidity: %d\n", press_raw, temp_raw, hum_raw);
-        printf("Pressure (Pa): %.2f Temperature (°F): %.2f Humidity (%%): %.2f\n\n", press/256.0, C_2_F(temp/100.0), hum/1024.0);
+            //printf("Raw Pressure: %d Raw Temperature: %d Raw Humidity: %d\n", press_raw, temp_raw, hum_raw);
+            printf("Pressure (Pa): %.2f Temperature (°F): %.2f Humidity (%%): %.2f\n", press/256.0, C_2_F(temp/100.0), hum/1024.0);
+        }
 
-        sleep_ms(1000);
+        else printf("Temperature (°F): %.2f\n", C_2_F(temp/100.0));
+            
+        sleep_ms(10);
     }
 }

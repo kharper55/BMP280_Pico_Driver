@@ -23,10 +23,51 @@ int8_t dig_H6;
 
 BMX280_S32_t t_fine;
 
+// Bosch recommended configuration for weather monitoring application
+const bmx280_config_t bmx280_weather_mon_cfg = { // 0.16uA current consumption
+    BMX280_PWR_MODE_FRC,
+    BMX280_TSTDBY_0_5MS, // Value inconsequential in forced operating mode
+    BMX280_FILT_OFF,
+    BMX280_OVERSAMP_X1,  // Temp
+    BMX280_OVERSAMP_X1,  // Press
+    BMX280_OVERSAMP_X1   // Hum
+};
+
+// Bosch recommended configuration for humidity sensing application
+const bmx280_config_t bmx280_hum_sensing_cfg = { // 2.9uA current consumption
+    BMX280_PWR_MODE_FRC,
+    BMX280_TSTDBY_0_5MS, // Value inconsequential in forced operating mode
+    BMX280_FILT_OFF,
+    BMX280_OVERSAMP_X1,  // Temp
+    BMX280_SKIP_MEAS,    // Press
+    BMX280_OVERSAMP_X1   // Hum
+};
+
+// Bosch recommended configuration for indoor navigation application
+const bmx280_config_t bmx280_indoor_nav_cfg = { // 633uA current consumption
+    BMX280_PWR_MODE_NORM,
+    BMX280_TSTDBY_0_5MS,
+    BMX280_FILT_COEFF_16,
+    BMX280_OVERSAMP_X2,  // Temp
+    BMX280_OVERSAMP_X16, // Press
+    BMX280_OVERSAMP_X1   // Hum
+};
+
+// Bosch recommended configuration for gaming application
+const bmx280_config_t bmx280_gaming_cfg = { // 581uA current consumption
+    BMX280_PWR_MODE_NORM,
+    BMX280_TSTDBY_0_5MS,
+    BMX280_FILT_COEFF_16,
+    BMX280_OVERSAMP_X1,  // Temp
+    BMX280_OVERSAMP_X4,  // Press
+    BMX280_SKIP_MEAS     // Hum
+};
+
 // Compensation functions provided by Bosch in BMX280 datasheet
 
-// Returns temperature in DegC, resolution is 0.01 DegC. Output value of “5123” equals 51.23 DegC.
-// t_fine carries fine temperature as global value
+// Returns temperature in DegC as signed 32 bit integer, resolution is 0.01 DegC. Output value of “5123” equals 51.23 DegC.
+// t_fine carries fine temperature as global value. Must call bmp280_compensate_T_int32() before pressure/humidity compensation since 
+// these depend on t_fine, which is updated via bmp280_compensate_T_int32()
 BMX280_S32_t bmx280_compensate_T_int32(BMX280_S32_t adc_T) {
     BMX280_S32_t var1, var2, T;
     var1 = ((((adc_T>>3) - ((BMX280_S32_t)dig_T1<<1))) * ((BMX280_S32_t)dig_T2)) >> 11;
@@ -74,29 +115,38 @@ BMX280_U32_t bme280_compensate_H_int32(BMX280_S32_t adc_H) {
     return (BMX280_U32_t)(v_x1_u32r>>12);
 }
 
-int bmx280_sw_reset(void) {
+pico_err_t bmx280_sw_reset(void) {
 
     uint8_t txdata = BMX280_REG_RESET_VALUE;
 
-    int err = i2c_reg_write(i2c0, BMX280_SLAVE_ADDR, BMX280_REG_RESET, &txdata, 1); // Force software reset by writing the reset word to device
+    pico_err_t err = i2c_reg_write(i2c0, BMX280_SLAVE_ADDR, BMX280_REG_RESET, &txdata, 1); // Force software reset by writing the reset word to device
     
     return err;
 }
 
-int bmx280_init(bool rst) { // need to update this with settings for run-time config...
+pico_err_t bmx280_init(bmx280_config_t * cfg, bool rst) { // need to update this with settings for run-time config...
+
+    bmx280_mode_t mode = cfg->mode;
+    bmx280_tsdby_t tsdby = cfg->tsdby;
+    bmx280_filter_t filt = cfg->filt;
+    bmx280_osrs_t osrs_temp = cfg->osrs_temp;
+    bmx280_osrs_t osrs_press = cfg->osrs_press;
+    bmx280_osrs_t osrs_hum = cfg->osrs_hum;
 
     uint8_t rxData[2];
 
-    uint8_t txdata = (BMX280_PWR_MODE_NORM << BMX280_REG_CTRL_MEAS_PWR) & 0xFF; // Set power mode to normal
-    txdata |= (BMX280_OVERSAMP_X1 << BMX280_REG_CTRL_MEAS_TBIT); // Set oversampling value for temperature to x1 (enable its measurement)
-    txdata |= (BMX280_OVERSAMP_X1 << BMX280_REG_CTRL_MEAS_PBIT); // Set oversampling value for pressure to x1 (enable its measurement)
+    uint8_t txdata = (mode << BMX280_REG_CTRL_MEAS_PWR) & 0xFF; // Set power mode to normal
+    txdata |= (osrs_temp << BMX280_REG_CTRL_MEAS_TBIT); // Set oversampling value for temperature to x1 (enable its measurement)
+    txdata |= (osrs_press << BMX280_REG_CTRL_MEAS_PBIT); // Set oversampling value for pressure to x1 (enable its measurement)
     
-    uint8_t txdata2 = BMX280_OVERSAMP_X1 << BME280_REG_CTRL_MEAS_HBIT; // Set oversampling value for humidity to x1 (enable its measurement)
+    uint8_t txdata2 = osrs_hum << BME280_REG_CTRL_MEAS_HBIT; // Set oversampling value for humidity to x1 (enable its measurement)
 
     uint8_t device_id = 0x00;
     uint8_t * device_id_str;
 
-    int err = PICO_ERROR_NONE;
+    uint8_t config_reg_data = (tsdby << BMX280_REG_CONFIG_TSTDBY_BIT) | (filt << BMX280_REG_CONFIG_FILT_BIT); // In sleep mode, writes to config register are ignored.
+
+    pico_err_t err = PICO_ERROR_NONE;
 
     //sleep_ms(6000);
 
@@ -240,6 +290,16 @@ int bmx280_init(bool rst) { // need to update this with settings for run-time co
 
 }
 
+pico_err_t bmx280_status(bmx280_status_t * status) {
+    pico_err_t err = PICO_ERROR_NONE;
+    uint8_t buff;
+
+    err = i2c_reg_read(i2c0, BMX280_SLAVE_ADDR, BMX280_REG_STATUS, &buff, 1); // Read back status register
+    if (err == 1) *status = (((buff >> BMX280_REG_STATUS_MEASBIT) & 0x01) | (((buff >> BMX280_REG_STATUS_IMGBIT) & 0x01) << 1));
+    
+    return err;
+}
+
 /* NEED TO LOOK INTO THE FOLLOWING...
 - Whats the deal with BME280 vs BMP280 data formatting... confused about XLSB usage on BME280...? Its different than from BMP280
 - Need to think about how to handle humidity / pressure measurement without tfine? If temperature is disabled, can we grab these values?...
@@ -247,25 +307,26 @@ Not important for the application but matters for the driver... Should probably 
 make such a call... with slow changing temperature, its prob fine...
 - Add Doxygen style comments
 - consider making the raw functions return only: PICO_ERROR_NONE instead of byte counts
+- play with various filter and tsdby settings, etc.. investigate best low power settings
 */
 
 // ===========================================================================================================================================
-static int bmx280_read_temp_raw(int32_t * temp_raw) {
+static pico_err_t bmx280_read_temp_raw(int32_t * temp_raw) {
 
-    int err = PICO_ERROR_NONE;
+    pico_err_t err = PICO_ERROR_NONE;
     uint8_t buff[BMX280_TEMP_RAW_LEN];
 
     //printf("Reading temperature...\n\n");
     err = i2c_reg_read(i2c0, BMX280_SLAVE_ADDR, BMX280_REG_TEMP_MSB, buff, BMX280_TEMP_RAW_LEN); // Read back temperature measurement
-    if (err != PICO_ERROR_GENERIC && err == BMX280_TEMP_RAW_LEN) *temp_raw = BMP280_PACK_DATA(buff[0], buff[1], buff[2]);
+    if (err != PICO_ERROR_GENERIC && err == BMX280_TEMP_RAW_LEN) *temp_raw = BMX280_PACK_DATA_20BIT(buff[0], buff[1], buff[2]);
     
     return err;
 }
 
 // ===========================================================================================================================================
-int bmx280_read_temp(int32_t * temp) {
+pico_err_t bmx280_read_temp(int32_t * temp) {
 
-    int err = PICO_ERROR_NONE;
+    pico_err_t err = PICO_ERROR_NONE;
     int32_t temp_raw;
 
     err = bmx280_read_temp_raw(&temp_raw);
@@ -275,22 +336,22 @@ int bmx280_read_temp(int32_t * temp) {
 }
 
 // ===========================================================================================================================================
-static int bmx280_read_press_raw(int32_t * press_raw) {
+static pico_err_t bmx280_read_press_raw(int32_t * press_raw) {
 
-    int err = PICO_ERROR_NONE;
+    pico_err_t err = PICO_ERROR_NONE;
     uint8_t buff[BMX280_PRESS_RAW_LEN];
 
     //printf("Reading pressure...\n\n");
     err = i2c_reg_read(i2c0, BMX280_SLAVE_ADDR, BMX280_REG_PRESS_MSB, buff, BMX280_PRESS_RAW_LEN); // Read back pressure measurement, let the BMP280 auto increment registers
-    if (err != PICO_ERROR_GENERIC && err == BMX280_PRESS_RAW_LEN) *press_raw = BMP280_PACK_DATA(buff[0], buff[1], buff[2]);
+    if (err != PICO_ERROR_GENERIC && err == BMX280_PRESS_RAW_LEN) *press_raw = BMX280_PACK_DATA_20BIT(buff[0], buff[1], buff[2]);
 
     return err;
 }
 
 // ===========================================================================================================================================
-int bmx280_read_press(uint32_t * press) {
+pico_err_t bmx280_read_press(uint32_t * press) {
 
-    int err = PICO_ERROR_NONE;
+    pico_err_t err = PICO_ERROR_NONE;
     int32_t press_raw;
 
     err = bmx280_read_press_raw(&press_raw);
@@ -300,22 +361,22 @@ int bmx280_read_press(uint32_t * press) {
 }
 
 // ===========================================================================================================================================
-static int bme280_read_hum_raw(int32_t * hum_raw) {
+static pico_err_t bme280_read_hum_raw(int32_t * hum_raw) {
 
-    int err = PICO_ERROR_NONE;
+    pico_err_t err = PICO_ERROR_NONE;
     uint8_t buff[BME280_HUM_RAW_LEN];
 
     //printf("Reading humidity...\n\n");
     err = i2c_reg_read(i2c0, BMX280_SLAVE_ADDR, BME280_REG_HUM_MSB, buff, BME280_HUM_RAW_LEN); // Read back humidity measurement
-    if (err != PICO_ERROR_GENERIC && err == BME280_HUM_RAW_LEN) *hum_raw = (int32_t)(buff[0] << 8 | buff[1]);
+    if (err != PICO_ERROR_GENERIC && err == BME280_HUM_RAW_LEN) *hum_raw = BME280_PACK_DATA_16BIT(buff[0], buff[1]);
 
     return err;
 }
 
 // ===========================================================================================================================================
-int bme280_read_hum(uint32_t * hum) {
+pico_err_t bme280_read_hum(uint32_t * hum) {
 
-    int err = PICO_ERROR_NONE;
+    pico_err_t err = PICO_ERROR_NONE;
     int32_t hum_raw;
 
     err = bme280_read_hum_raw(&hum_raw);
