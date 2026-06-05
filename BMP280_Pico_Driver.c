@@ -13,7 +13,6 @@
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "pico/binary_info.h"
-#include <math.h>
 
 // Custom includes
 #include "bmx280.h"
@@ -46,6 +45,18 @@ int main() {
 
     bmx280_config_t myCfg = bmx280_indoor_nav_cfg;
 
+    sleep_ms(6000);
+
+    //bmx280_self_test_result_t * result;
+
+    //bmx280_self_test(result);
+
+    //printf("Err %d: BMX280 self test %s.\n", *result, *result == BMX280_OK ? "PASSED" : "FAILED");
+    //if (*result == BMX280_COMM_ERR_OR_WRONG_DEV) printf("Cannot access register 0x%X for CRC check.\n\n", BME280_CRC_DATA_ADDR);
+    //else printf("\n");
+
+    sleep_ms(2);
+
     bmx280_init(&myCfg, false);
 
     sleep_ms(100);
@@ -68,17 +79,20 @@ int main() {
         press = bmx280_compensate_P_int64(press_raw);
         hum = bme280_compensate_H_int32(hum_raw);*/
 
-        bmx280_read_temp(&temp);
+        bmx280_read_measurements(&myCfg, &temp, &press, &hum);
+        printf("Pressure (Pa): %.2f Temperature (°F): %.2f Humidity (%%): %.2f\n", press/256.0, C_2_F(temp/100.0), hum/1024.0);
+
+        /*bmx280_read_temp(&myCfg, &temp);
 
         if (myCfg.osrs_press != BMX280_SKIP_MEAS && myCfg.osrs_hum != BMX280_SKIP_MEAS) {
-            bmx280_read_press(&press);
-            bme280_read_hum(&hum);
+            bmx280_read_press(&myCfg, &press);
+            bme280_read_hum(&myCfg, &hum);
 
             //printf("Raw Pressure: %d Raw Temperature: %d Raw Humidity: %d\n", press_raw, temp_raw, hum_raw);
             printf("Pressure (Pa): %.2f Temperature (°F): %.2f Humidity (%%): %.2f\n", press/256.0, C_2_F(temp/100.0), hum/1024.0);
         }
 
-        else printf("Temperature (°F): %.2f\n", C_2_F(temp/100.0));
+        else printf("Temperature (°F): %.2f\n", C_2_F(temp/100.0));*/
             
         sleep_ms(10);
     }

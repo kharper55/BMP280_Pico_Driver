@@ -7,7 +7,7 @@
  * @param[in]  i2c        I2C peripheral instance.
  * @param[in]  scl        Pin number for SCL pin.
  * @param[in]  sda        Pin number for SDA pin.
- * @param[out] fclk       Bit rate for I2C transmissions. 
+ * @param[in]  fclk       Bit rate for I2C transmissions. 
  * @param[in]  puen       Enable internal pullups.
  * 
  * @return None
@@ -28,6 +28,63 @@ void app_i2c_init(i2c_inst_t * i2c, const uint8_t scl, const uint8_t sda, const 
 }
 
 /**
+ * Read a number of registers from an I2C slave. 
+ * @param[in]  i2c        I2C peripheral instance.
+ * @param[in]  slave_addr 7-bit I2C slave address.
+ * @param[in]  reg_addr   Register address to begin reading from.
+ * @param[out] buff       Destination buffer for received data. Must be at least as large as nbytes.
+ * @param[in]  nbytes     Number of bytes to read. Use a number > 1 for burst reads.
+ * 
+ * @return PICO_ERROR_NONE on success, PICO_ERROR_GENERIC on failure.
+ */  
+pico_err_t i2c_reg_read(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, uint8_t * buff, const size_t nbytes) {
+
+    if (buff == NULL || nbytes == 0) return PICO_ERROR_GENERIC;
+
+    int ret = i2c_write_blocking(i2c, slave_addr, &reg_addr, 1, true);
+    if (ret != 1) return PICO_ERROR_GENERIC;
+
+    ret = i2c_read_blocking(i2c, slave_addr, buff, nbytes, false);
+    if (ret != (int)nbytes) return PICO_ERROR_GENERIC;
+    
+    return PICO_ERROR_NONE;
+}
+
+/**
+ * Write to a number of registers on an I2C slave.
+ * @param[in]  i2c        I2C peripheral instance.
+ * @param[in]  slave_addr 7-bit I2C slave address.
+ * @param[in]  reg_addr   Register address to begin writing to.
+ * @param[in]  data       Data to transmit. Must be at least as large as nbytes.
+ * @param[in]  nbytes     Number of bytes to write. Use a number > 1 for burst writes.
+ * 
+ * @return PICO_ERROR_NONE on success, PICO_ERROR_GENERIC on failure.
+ */  
+pico_err_t i2c_reg_write(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, const uint8_t * data, const size_t nbytes) {
+
+    // Does it actually make sense to pass nbytes here? When would we write multiple bytes?
+    
+    if (nbytes > I2C_BUFF_SIZE_MAX || data == NULL || nbytes == 0) return PICO_ERROR_GENERIC;
+
+    uint8_t src[nbytes + 1]; // VLA used to avoid a fixed-size temporary buffer
+
+    src[0] = reg_addr;
+    memcpy(&src[1], data, nbytes);
+
+    int ret = i2c_write_blocking(i2c, slave_addr, src, nbytes + 1, false);
+    if (ret != (int)(nbytes + 1)) return PICO_ERROR_GENERIC;
+    
+    return PICO_ERROR_NONE;
+}
+
+
+
+
+
+
+
+
+/**
  * Read a number of registers from an I2C slave.
  * @param[in]  i2c        I2C peripheral instance.
  * @param[in]  slave_addr 7-bit I2C slave address.
@@ -37,7 +94,7 @@ void app_i2c_init(i2c_inst_t * i2c, const uint8_t scl, const uint8_t sda, const 
  * 
  * @return Number of bytes read on success, PICO_ERROR_GENERIC on failure.
  */  
-pico_err_t i2c_reg_read(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, uint8_t * buff, const size_t nbytes) {
+/*pico_err_t i2c_reg_read(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, uint8_t * buff, const size_t nbytes) {
 
     int err = PICO_ERROR_NONE;
 
@@ -46,7 +103,8 @@ pico_err_t i2c_reg_read(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_
     if (err != PICO_ERROR_GENERIC) err = i2c_read_blocking(i2c, slave_addr, buff, nbytes, false);
 
     return err;
-}
+    
+}*/
 
 /**
  * Write to a number of registers on an I2C slave.
@@ -58,7 +116,7 @@ pico_err_t i2c_reg_read(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_
  * 
  * @return Number of bytes written on success, PICO_ERROR_GENERIC on failure.
  */  
-pico_err_t i2c_reg_write(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, const uint8_t * data, const size_t nbytes) {
+/*pico_err_t i2c_reg_write(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, const uint8_t * data, const size_t nbytes) {
 
     int err = PICO_ERROR_NONE;
     
@@ -72,4 +130,4 @@ pico_err_t i2c_reg_write(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8
     err = i2c_write_blocking(i2c, slave_addr, src, nbytes + 1, false);
     
     return err;
-}
+}*/

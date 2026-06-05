@@ -1,7 +1,11 @@
+#ifndef BMX280_H
+#define BMX280_H
+
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include "app_i2c.h"
 #include "util.h"
+//#include "bme280_selftest.h"
 
 // Note: BME280 contains humidity sensor. BMP280 does not.
 // BMX stands for either BME or BMP - these values are valid for either device
@@ -18,8 +22,7 @@ typedef long long int BMX280_S64_t;
 #define BMX280_SPI !BMX280_I2C
 //#define BMX280_SPI_PORT spi0
 
-#define BMX280_SLAVE_ADDR 0x76 // Value dependent on SDO voltage. If SDO is '1', use 0x77
-#define BME280_SLAVE_ADDR 0x68
+#define BMX280_SLAVE_ADDR 0x76 // Value dependent on SDO voltage. Addr = 0x76 |= SDO. Cannot be left floating.
 
 // Contains the chip identification number chip_id[7:0], which is 0x58 for BMP280 and
 // 0x60 for BME280. This number can be read as soon as the device finished the power-on-reset.
@@ -39,8 +42,8 @@ typedef long long int BMX280_S64_t;
 // registers and back to ‘0’ when the copying is done. The data are copied at power-on-reset 
 // and before every conversion.
 #define BMX280_REG_STATUS         0xF3 // Read only
-#define BMX280_REG_STATUS_MEASBIT 3 
-#define BMX280_REG_STATUS_IMGBIT  0
+#define BMX280_REG_STATUS_MEAS_BIT_POS 3 
+#define BMX280_REG_STATUS_IMG_BIT_POS  0
 typedef enum {
     BMX280_WAITING               = 0,
     BMX280_MEASURING             = 1,
@@ -54,9 +57,9 @@ typedef enum {
 #define BME280_REG_CTRL_HUM       0xF2
 
 // Oversampling settings (bits [7:5] and [4:2])
-#define BMX280_REG_CTRL_MEAS_TBIT 5 // Ensure only writing 3 bit data
-#define BMX280_REG_CTRL_MEAS_PBIT 2 // Ensure only writing 3 bit data
-#define BME280_REG_CTRL_MEAS_HBIT 0 // Ensure only writing 3 bit data
+#define BMX280_REG_CTRL_MEAS_T_BIT_POS 5 // Ensure only writing 3 bit data
+#define BMX280_REG_CTRL_MEAS_P_BIT_POS 2 // Ensure only writing 3 bit data
+#define BME280_REG_CTRL_MEAS_H_BIT_POS 0 // Ensure only writing 3 bit data
 typedef enum {
     BMX280_SKIP_MEAS    = 0,
     BMX280_OVERSAMP_X1  = 1,
@@ -67,7 +70,7 @@ typedef enum {
 } bmx280_osrs_t;
 
 // Power settings (bits [1:0])
-#define BMX280_REG_CTRL_MEAS_PWR 0  // Ensure only writing 2 bit data
+#define BMX280_REG_CTRL_MEAS_PWR_BIT_POS 0  // Ensure only writing 2 bit data
 typedef enum {
     BMX280_PWR_MODE_SLP  = 0,
     BMX280_PWR_MODE_FRC  = 1,
@@ -82,7 +85,7 @@ typedef enum {
 #define BMX280_REG_CONFIG     0xF5 // R/W 
 
 // Tstdby settings
-#define BMX280_REG_CONFIG_TSTDBY_BIT 5
+#define BMX280_REG_CONFIG_TSTDBY_BIT_POS 5
 typedef enum {
     BMX280_TSTDBY_0_5MS   = 0b000,
     BMX280_TSTDBY_62_5MS  = 0b001,
@@ -97,7 +100,7 @@ typedef enum {
 } bmx280_tsdby_t;
 
 // Filter settings
-#define BMX280_REG_CONFIG_FILT_BIT 2
+#define BMX280_REG_CONFIG_FILT_BIT_POS 2
 typedef enum {
     BMX280_FILT_OFF      = 0,
     BMX280_FILT_COEFF_2  = 1,
@@ -212,10 +215,21 @@ are selected through the osrs_t[2:0] bits in control register 0xF4.
 #define PASCAL_2_ATM(pascal) (double)(pascal * 9.86923 * 1/1000000) // Use to convert pressure values from BMP280 to units of ATM
 #define C_2_F(c) (double)(c * 9/5 + 32)
 
+/**\name API warning code */
+// tHESE ARE FROM BOSCH
+#define BME280_W_SELF_TEST_FAIL         INT8_C(2)
+#define BME280_CRC_DATA_ADDR	UINT8_C(0xE8)
+#define BME280_CRC_DATA_LEN	UINT8_C(1)
+#define BME280_CRC_CALIB1_ADDR	UINT8_C(0x88)
+#define BME280_CRC_CALIB1_LEN	UINT8_C(26)
+#define BME280_CRC_CALIB2_ADDR	UINT8_C(0xE1)
+#define BME280_CRC_CALIB2_LEN	UINT8_C(7)
+
 typedef enum {
-    BMX280_BMP280,
-    BMX280_BME280
-} bmx280_type_t;
+    BMP280 = 0x58, // 0x58 in device ID register @ addr 0xD0
+    BME280 = 0x60, // 0x60 in device ID register @ addr 0xD0
+    UNKNOWN        // Device ID register has not yet been read
+} bmx280_dev_t;
 
 typedef struct {
     bmx280_mode_t mode;
@@ -224,6 +238,7 @@ typedef struct {
     bmx280_osrs_t osrs_temp; 
     bmx280_osrs_t osrs_press;
     bmx280_osrs_t osrs_hum;
+    bmx280_dev_t dev;
 } bmx280_config_t;
 
 // See section 10 in BME280 datasheet rev1.23 for implementation details
@@ -236,6 +251,7 @@ typedef enum {
     BMX280_TRIM_DATA_OOB           = 20,
     BMX280_TEMP_BW_OR_MEMS_DEFECT  = 30,
     BMX280_PRESS_BW_OR_MEMS_DEFECT = 31,
+    BMX280_HUM_BW_OR_MEMS_DEFECT   = 32, // Added on my own volition
     BMX280_IMPLAUSIBLE_TEMP        = 40, // Default limits are 0-40C
     BMX280_IMPLAUSIBLE_PRESS       = 41, // Default limits are 900-1100hPa
     BMX280_IMPLAUSIBLE_HUM         = 42  // Default limits are 20-80%rH
@@ -248,8 +264,27 @@ BMX280_U32_t bme280_compensate_H_int32(BMX280_S32_t adc_H); // Only relevant for
 
 pico_err_t bmx280_init(bmx280_config_t * cfg, bool rst);
 pico_err_t bmx280_sw_reset(void);
-pico_err_t bmx280_status(bmx280_status_t * status);
-pico_err_t bmx280_self_test(bmx280_self_test_result_t * result);
-pico_err_t bmx280_read_temp(int32_t * temp);
-pico_err_t bmx280_read_press(uint32_t * press);
-pico_err_t bme280_read_hum(uint32_t * hum);
+pico_err_t bmx280_check_status(bmx280_config_t * cfg, bmx280_status_t * status);
+pico_err_t bmx280_set_mode(bmx280_config_t * cfg);
+pico_err_t bmx280_self_test(bmx280_config_t * cfg, bmx280_self_test_result_t * result);
+/*make these static?*/
+// Chip wants to be burst read for all 3 measurement peripherals when being used... 
+// If we want to be able to config for normal mode or frc mode and forget, should have one 
+// single public call in the API which accomplishes all three, pending the actual dev config.
+pico_err_t bmx280_read_temp(bmx280_config_t * cfg, int32_t * temp);
+pico_err_t bmx280_read_press(bmx280_config_t * cfg, uint32_t * press);
+pico_err_t bme280_read_hum(bmx280_config_t * cfg, uint32_t * hum);
+pico_err_t bmx280_read_measurements(bmx280_config_t * cfg, int32_t * temp, uint32_t * press, uint32_t * hum);
+
+/*!
+ * @brief This API reads the stored CRC and then compare with calculated CRC
+ *
+ * @param[in] dev : Structure instance of bme280_dev.
+ *
+ * @return Result of API execution status
+ * @retval zero -> Success / +ve value -> Warning / -ve value -> Error
+ */
+//int8_t bme280_crc_selftest(const struct bme280_dev *dev);
+bmx280_self_test_result_t bme280_crc_selftest(const i2c_inst_t * i2c);
+
+#endif // BMX280_H

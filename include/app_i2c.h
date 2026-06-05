@@ -1,3 +1,6 @@
+#ifndef APP_I2C_H
+#define APP_I2C_H
+
 #include "hardware/i2c.h"
 #include "pico/binary_info.h"
 #include "pico/stdlib.h"
@@ -15,3 +18,5 @@
 void app_i2c_init(i2c_inst_t * i2c, const uint8_t scl, const uint8_t sda, const uint32_t fclk, const bool puen);
 pico_err_t i2c_reg_read(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, uint8_t * buff, const size_t nbytes);
 pico_err_t i2c_reg_write(i2c_inst_t * i2c, const uint8_t slave_addr, const uint8_t reg_addr, const uint8_t * data, const size_t nbytes);
+
+#endif // APP_I2C_H
