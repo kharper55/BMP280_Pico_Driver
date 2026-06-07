@@ -572,7 +572,7 @@ pico_err_t bmx280_read_measurements(bmx280_config_t * cfg, int32_t * temp, uint3
     if (cfg->osrs_hum)
         t_meas += 2.3f * (1 << (cfg->osrs_hum - 1)) + 0.575f;
 
-    int t_meas_ms = (int)ceilf(t_meas);
+    int t_meas_ms = (int)ceilf(t_meas); // Really would rather avoid any floating point math or ceilf if possible
 
     if (cfg == NULL) return PICO_ERROR_GENERIC;
     
@@ -619,7 +619,7 @@ pico_err_t bmx280_read_measurements(bmx280_config_t * cfg, int32_t * temp, uint3
 
 
 /*!
- * @brief This API reads the stored CRC and then compare with calculated CRC
+ * @brief This API reads the stored CRC and then compare with calculated CRC. Property of Bosch.
  *
  * @param[in] dev : Structure instance of bme280_dev.
  *
@@ -637,15 +637,17 @@ bmx280_self_test_result_t bme280_crc_selftest(const i2c_inst_t * i2c) {
 
 	pico_err_t err = PICO_ERROR_NONE;
 
-	/* Read stored crc value from register */
+	// Read stored crc value from register
 	reg_addr = BME280_CRC_DATA_ADDR;
+
+    // Old func, keeping until I can test refactored version below
 	//rslt = bme280_get_regs(reg_addr, reg_data, BME280_CRC_DATA_LEN, dev);
-	err = i2c_reg_read(i2c, BMX280_SLAVE_ADDR, reg_addr, reg_data, BME280_CRC_DATA_LEN);
-	if (err != PICO_ERROR_NONE) rslt = BMX280_COMM_ERR_OR_WRONG_DEV;
+	/*err = i2c_reg_read(i2c, BMX280_SLAVE_ADDR, reg_addr, reg_data, BME280_CRC_DATA_LEN);
+	if (err != PICO_ERROR_NONE) {rslt = BMX280_COMM_ERR_OR_WRONG_DEV;}
 	if (rslt == BMX280_OK) {
 		stored_crc = reg_data[0];
         printf("Stored CRC value: 0x%X\n\n", stored_crc);
-		/* Calculated CRC value with calibration register */
+		// Calculated CRC value with calibration register 
 		reg_addr = BME280_CRC_CALIB1_ADDR;
 		//rslt = bme280_get_regs(reg_addr, &reg_data[0], BME280_CRC_CALIB1_LEN, dev);
 		err = i2c_reg_read(i2c, BMX280_SLAVE_ADDR, reg_addr, &reg_data[0], BME280_CRC_CALIB1_LEN);
@@ -657,20 +659,50 @@ bmx280_self_test_result_t bme280_crc_selftest(const i2c_inst_t * i2c) {
 			if (err != PICO_ERROR_NONE) rslt = BMX280_COMM_ERR_OR_WRONG_DEV;
 			if (rslt == BMX280_OK) {
 				calculated_crc = crc_calculate(reg_data, BME280_CRC_CALIB1_LEN + BME280_CRC_CALIB2_LEN);
-				/* Validate CRC */
+				// Validate CRC 
 				if (stored_crc == calculated_crc)
 					rslt = BMX280_OK;
 				else
 					rslt = BMX280_TRIM_DATA_OOB;
 			}
 		}
-	}
+	}*/
+
+    err = i2c_reg_read(i2c, BMX280_SLAVE_ADDR, reg_addr, reg_data, BME280_CRC_DATA_LEN);
+	if (err != PICO_ERROR_NONE) {
+        rslt = BMX280_COMM_ERR_OR_WRONG_DEV;
+        return rslt;
+    }
+
+    stored_crc = reg_data[0];
+    //printf("Stored CRC value: 0x%X\n\n", stored_crc);
+    // Calculated CRC value with calibration register 
+    reg_addr = BME280_CRC_CALIB1_ADDR;
+    //rslt = bme280_get_regs(reg_addr, &reg_data[0], BME280_CRC_CALIB1_LEN, dev);
+    err = i2c_reg_read(i2c, BMX280_SLAVE_ADDR, reg_addr, &reg_data[0], BME280_CRC_CALIB1_LEN);
+    if (err != PICO_ERROR_NONE) {
+        rslt = BMX280_COMM_ERR_OR_WRONG_DEV;
+        return rslt;
+    }
+
+    reg_addr = BME280_CRC_CALIB2_ADDR;
+    //rslt = bme280_get_regs(reg_addr, &reg_data[BME280_CRC_CALIB1_LEN], BME280_CRC_CALIB2_LEN, dev);
+    err = i2c_reg_read(i2c, BMX280_SLAVE_ADDR, reg_addr, &reg_data[BME280_CRC_CALIB1_LEN], BME280_CRC_CALIB2_LEN);
+    if (err != PICO_ERROR_NONE) {
+        rslt = BMX280_COMM_ERR_OR_WRONG_DEV;
+        return rslt;
+    }
+
+    calculated_crc = crc_calculate(reg_data, BME280_CRC_CALIB1_LEN + BME280_CRC_CALIB2_LEN);
+    // Validate CRC 
+    if (stored_crc == calculated_crc) rslt = BMX280_OK;
+    else rslt = BMX280_TRIM_DATA_OOB;
 
 	return rslt;
 }
 
 /*!
- * @brief This API calculates the CRC
+ * @brief This API calculates the CRC. Property of Bosch.
  *
  * @param[in] mem_values : reg_data parameter to calculate CRC
  * @param[in] mem_length : Parameter to calculate CRC

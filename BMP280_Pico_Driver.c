@@ -40,10 +40,11 @@ int main() {
     bmx280_osrs_t hum_osrs = press_osrs;
 
     const extern bmx280_config_t bmx280_indoor_nav_cfg;
+    const extern bmx280_config_t bmx280_weather_mon_cfg;
 
     //bmx280_config_t myCfg = {BMX280_PWR_MODE_NORM, BMX280_TSTDBY_0_5MS, BMX280_FILT_OFF, temp_osrs, press_osrs, hum_osrs};
-
-    bmx280_config_t myCfg = bmx280_indoor_nav_cfg;
+    //bmx280_config_t myCfg = bmx280_indoor_nav_cfg; // Works fine
+    bmx280_config_t myCfg = bmx280_weather_mon_cfg;
 
     sleep_ms(6000);
 
